@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="ja" xml:lang="ja">
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+		<meta http-equiv="Content-Style-Type" content="text/css" />
+		<meta http-equiv="Content-Script-Type" content="text/javascript" />
+	    <link rel="stylesheet" type="text/css" href="./jsviz.css"></link>
+
+		<script type="text/javascript" src="./js/workered-jsviz.js?v=2"></script>
+		<script type="text/javascript" src="./js/jquery.js"></script>
+		<script type="text/javascript" src="./js/progress-view.js?v=2"></script>
+		<script type="text/javascript" src="./js/progress-model.js?v=2"></script>
+		<script type="text/javascript" src="./js/worker-stopgo.js?v=2"></script>
+		<script type="text/javascript" src="./js/global-util.js?v=2"></script>
+		<script type="text/javascript" src="./js/jsviz.js?v=2"></script>
+		<script type="text/javascript" src="./js/errorsink.js?v=2"></script>
+		<script type="text/javascript" src="./js/jsviz-ui.js?v=2"></script>
+		<script type="text/javascript" src="./js/graph-model.js?v=2"></script>
+		<script type="text/javascript" src="./js/curve-tween.js?v=2"></script>
+		<script type="text/javascript" src="./js/difftype.js?v=2"></script>
+
+		<link href="css/metro.css" rel="stylesheet">
+		<script src="js/metro.js"></script>
+
+		<script type="text/javascript">
+		//global variables
+		var dotdata = "digraph testgraph{{node[shape=none,fontsize=23]\"Welcome to Liviz.js!\"}{node[shape=none]\"Interactive GraphViz on your browser\"}{edge[color=transparent]\"Welcome to Liviz.js!\" ->\"Interactive GraphViz on your browser\"}A -> B -> C -> D -> E;	B -> D;{node[shape=box];1 -> 2 -> 3;}E -> 1;2 -> C;{rank=same; 1; A;}{rank=same; 3; D;}}";
+		var identity = "testserver1";
+		var state = 0; //0: open for new graphs 1: busy with receiving graphparts
+
+		window.connect = function connect(){
+		var socket;
+		var host = "ws://192.168.137.211:600";
+
+		try{
+			var socket = new WebSocket(host);
+			// message('<p class="event">Socket Status: '+socket.readyState);
+			socket.onopen = function(){
+				console.log('Socket Status: '+socket.readyState+' (open)');
+				login();
+			}
+
+			socket.onmessage = function(msg){
+				switch(window.state)
+				{
+					case 0:
+						if(msg.data == "$STARTGRAPH")
+						{
+							console.debug("started receiving graph");
+							window.dotdata = "";
+							window.state = 1;
+						}
+						else
+						{
+							console.debug("received graph in one packet");
+							window.dotdata = msg.data;
+							window.startDot();
+						}
+						break;
+					case 1:
+						if(msg.data == "$ENDGRAPH")
+						{
+							console.debug("ended receiving graph");
+							window.state = 0;
+							window.startDot();
+						}
+						else
+						{
+							window.dotdata = window.dotdata + msg.data;
+						}
+						break;
+				}
+				console.log('Received: '+msg.data);
+				//window.startDot();
+			}
+
+			socket.onclose = function(){
+				console.log('Socket Status: '+socket.readyState+' (Closed)');
+			}
+
+		} catch(exception){
+			console.log('Error'+exception);
+		}
+
+		function send(){
+			var text = $('#text').val();
+			if(text==""){
+				message('<p class="warning">Please enter a message');
+				return ;
+			}
+			try{
+				socket.send(text);
+				message('<p class="event">Sent: '+text)
+			} catch(exception){
+				message('<p class="warning">');
+			}
+			$('#text').val("");
+		}
+		window.socket = socket;
+	}
+
+	window.login = function login()
+	{
+		socket.send(identity);
+		socket.send("[\"aaaa::215:8d00:57:6466\"]");
+	}
+
+	</script>
+
+	<title>RiSCHER remote streamer</title>
+	</head>
+	<body class="app-page" onload="void w_launch()">
+		<div id="coding-area">
+		<svg id="graph-svg" style="outline: none;" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><g id="mainGraphContainer" /></svg>
+	</div>
+	</body>
+</html>
