@@ -55,7 +55,7 @@
 						{
 							console.debug("received graph in one packet");
 							window.dotdata = msg.data;
-							window.startDot();
+							window.ParsePacket();
 						}
 						break;
 					case 1:
@@ -63,7 +63,7 @@
 						{
 							console.debug("ended receiving graph");
 							window.state = 0;
-							window.startDot();
+							window.ParsePacket();
 						}
 						else
 						{
@@ -97,6 +97,13 @@
 			}
 			$('#text').val("");
 		}
+		window.ParsePacket = function ParsePacket()
+		{
+			var info = JSON.parse(window.dotdata);
+			$("#controls").text(info[0]);
+			window.dotdata = info[1];
+			window.startDot();
+		}
 		window.socket = socket;
 	}
 
@@ -111,6 +118,9 @@
 	<title>RiSCHER remote streamer</title>
 	</head>
 	<body class="app-page" onload="void w_launch()">
+		<div id="controls">
+			Here the controls and current info will be displayed
+		</div>
 		<div id="coding-area">
 		<svg id="graph-svg" style="outline: none;" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><g id="mainGraphContainer" /></svg>
 	</div>

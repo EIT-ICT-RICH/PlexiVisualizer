@@ -6,6 +6,7 @@ import hashlib
 import base64
 import os
 import json
+import time
 
 connectedclients = {}
 connectedSchedulers = {}
@@ -73,6 +74,9 @@ class ThreadedServerHandler(socketserver.BaseRequestHandler):
 				scheduler_clients[self.identity] = []
 			self.identity = request
 			print("New connection(scheduler): " + self.identity)
+			self.folder = "snapshots/" + self.identity.split(":")[-1]
+			if not os.path.exists(self.folder):
+				os.makedirs(self.folder)
 			while True:
 				data = str(self.request.recv(1024), "utf-8")
 				if data == "":
@@ -80,6 +84,9 @@ class ThreadedServerHandler(socketserver.BaseRequestHandler):
 				#for each listener, send the dot file
 				print("dotfile received:")
 				print(data)
+				info = json.loads(data)
+				with open(self.folder + "/" + str(int(time.time())) + ".dot", "w") as stream:
+					stream.writelines(info[1])
 				for client in scheduler_clients[self.identity]:
 					self.send(client.request, data)
 
@@ -114,7 +121,7 @@ class ThreadedServerHandler(socketserver.BaseRequestHandler):
 		c = chunks(data, 125)
 		socket.sendall(self.create_frame("$STARTGRAPH"))
 		for co in c:
-			self.request.sendall(self.create_frame(co))
+			socket.sendall(self.create_frame(co))
 		socket.sendall(self.create_frame("$ENDGRAPH"))
 
 
@@ -197,6 +204,8 @@ class ThreadedTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
 
 HOST = "192.168.137.211"
 PORT = 600
+if not os.path.exists("snapshots"):
+	os.makedirs("snapshots")
 server = ThreadedTCPServer((HOST, PORT), ThreadedServerHandler)
 server_thread = threading.Thread(target=server.serve_forever)
 server_thread.daemon = True
