@@ -8,7 +8,8 @@
 	    <link rel="stylesheet" type="text/css" href="./jsviz.css"></link>
 
 		<script type="text/javascript" src="./js/workered-jsviz.js?v=2"></script>
-		<script type="text/javascript" src="./js/jquery.js"></script>
+		<!-- <script type="text/javascript" src="./js/jquery.js"></script> -->
+		<script src="js/jquery-2.1.3.min.js"></script>
 		<script type="text/javascript" src="./js/progress-view.js?v=2"></script>
 		<script type="text/javascript" src="./js/progress-model.js?v=2"></script>
 		<script type="text/javascript" src="./js/worker-stopgo.js?v=2"></script>
@@ -27,11 +28,17 @@
 		//global variables
 		var dotdata = "digraph testgraph{{node[shape=none,fontsize=23]\"Welcome to Liviz.js!\"}{node[shape=none]\"Interactive GraphViz on your browser\"}{edge[color=transparent]\"Welcome to Liviz.js!\" ->\"Interactive GraphViz on your browser\"}A -> B -> C -> D -> E;	B -> D;{node[shape=box];1 -> 2 -> 3;}E -> 1;2 -> C;{rank=same; 1; A;}{rank=same; 3; D;}}";
 		var identity = "testserver1";
-		var state = 0; //0: open for new graphs 1: busy with receiving graphparts
+		var state = 0; //0: open for new graphs 1: busy with receiving graphparts, 2: requested history, 3: receiving history
+		var menudata = "";
+		var schedulers  = ["aaaa::215:8d00:57:6466", "aaaa::215:8d00:57:1234"];
+		var menu = {
+			"aaaa::215:8d00:57:6466" : [],
+			"aaaa::215:8d00:57:1234" : []
+		};
 
 		window.connect = function connect(){
 		var socket;
-		var host = "ws://192.168.137.211:600";
+		var host = "ws://192.168.7.102:600";
 
 		try{
 			var socket = new WebSocket(host);
@@ -70,8 +77,35 @@
 							window.dotdata = window.dotdata + msg.data;
 						}
 						break;
+					case 2:
+						if(msg.data == "$STARTGRAPH")
+						{
+							console.debug("started receiving stuff");
+							window.menudata = "";
+							window.state = 3;
+						}
+						else
+						{
+							console.debug("received stuff in one packet");
+							window.menudata = msg.data;
+							window.state = 0;
+							window.ParseMenu();
+						}
+						break;
+					case 3:
+						if(msg.data == "$ENDGRAPH")
+						{
+							console.debug("ended receiving stuff");
+							window.state = 0;
+							window.ParseMenu();
+						}
+						else
+						{
+							window.menudata = window.menudata + msg.data;
+						}
+						break;
 				}
-				console.log('Received: '+msg.data);
+				console.log('Received: ' + msg.data);
 				//window.startDot();
 			}
 
@@ -83,24 +117,10 @@
 			console.log('Error'+exception);
 		}
 
-		function send(){
-			var text = $('#text').val();
-			if(text==""){
-				message('<p class="warning">Please enter a message');
-				return ;
-			}
-			try{
-				socket.send(text);
-				message('<p class="event">Sent: '+text)
-			} catch(exception){
-				message('<p class="warning">');
-			}
-			$('#text').val("");
-		}
 		window.ParsePacket = function ParsePacket()
 		{
 			var info = JSON.parse(window.dotdata);
-			$("#controls").text(info[0]);
+			$("#info").text(info[0]);
 			window.dotdata = info[1];
 			window.startDot();
 		}
@@ -110,16 +130,63 @@
 	window.login = function login()
 	{
 		socket.send(identity);
-		socket.send("[\"aaaa::215:8d00:57:6466\"]");
+		socket.send(JSON.stringify(schedulers));
+		RequestUpdateMenu();
+	}
+
+	window.RequestUpdateMenu = function RequestUpdateMenu()
+	{
+		window.state = 2;
+		window.socket.send(JSON.stringify(["$REQUESTHISTORY", window.schedulers]));
+	}
+
+	window.ParseMenu = function ParseMenu()
+	{
+		window.state = 0;
+		window.menu = JSON.parse(window.menudata);
+		var html = "<div class=\"accordion\" data-role=\"accordion\" data-close-any=\"true\">\n";
+
+		for(var i = 0; i < window.schedulers.length; i++)
+		{
+			if (window.schedulers[i] in window.menu)
+			{
+				html += "<div class=\"frame\">\n "
+				+ 			"<div class=\"heading\">" + window.schedulers[i] + "</div>\n "
+				+				"<div class=\"content\">\n "
+				+ 			"<div class=\"listview\">\n ";
+				for(var j = 0; j < window.menu[window.schedulers[i]].length; j++)
+				{
+					var t = new Date(window.menu[window.schedulers[i]][j]*1000);
+					var formatted = t.format("dd.mm.yyyy hh:MM:ss");
+					html += "<div class=\"list\" onclick=\"window.RequestDotFile('" + window.schedulers[i] + "','" + window.menu[window.schedulers[i]][j] + "')\">\n"
+					+ 			"<span class=\"list-title\">" + formatted + "</span>\n"
+					+ 			"</div>\n";
+				}
+				html += "</div \n "
+				+ 			"</div>\n "
+				+ 			"</div>\n "
+				+				"</div>\n";
+			}
+		}
+
+		html += "</div>\n";
+		console.log(html);
+		$("#controls").html(html);
+	}
+
+	window.RequestDotFile = function RequestDotFile(scheduler, dotname)
+	{
+		window.socket.send(JSON.stringify(["$REQUESTGRAPH", scheduler, dotname]));
 	}
 
 	</script>
 
-	<title>RiSCHER remote streamer</title>
+	<title>RiSCHER FrankFancyGraphStreamer</title>
 	</head>
-	<body class="app-page" onload="void w_launch()">
-		<div id="controls">
-			Here the controls and current info will be displayed
+	<body class="app-page" onload="void w_launch();">
+		<div id="info">info about current graph here</div>
+		<div id="controls" style="width: 20%;">
+			menu here
 		</div>
 		<div id="coding-area">
 		<svg id="graph-svg" style="outline: none;" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><g id="mainGraphContainer" /></svg>

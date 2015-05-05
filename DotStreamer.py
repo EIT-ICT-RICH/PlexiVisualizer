@@ -7,6 +7,10 @@ import base64
 import os
 import json
 import time
+from os import listdir
+from os.path import isfile, join
+import argparse
+import datetime
 
 connectedclients = {}
 connectedSchedulers = {}
@@ -17,7 +21,6 @@ def chunks(l, n):
 	#Yield successive n-sized chunks from l
 	for i in range(0, len(l), n):
 		yield l[i:i+n]
-
 
 class ThreadedServerHandler(socketserver.BaseRequestHandler):
 
@@ -51,20 +54,48 @@ class ThreadedServerHandler(socketserver.BaseRequestHandler):
 			#wait for requests
 			print("New connection(webclient): " + self.identity)
 			while True:
+				# try:
+				data = self.parse_frame()
+				if data == "":
+					continue
+				data = str(data, "utf-8")
+				# if os.path.isfile(data + ".dot"):
+				# 	with open(data + ".dot", "r") as graphfile:
+				# 		content = graphfile.read()
+				# 	self.send(self.request, content)
+				# else:
+				# 	print(self.identity + " requested nonexisting graph " + data)
+				commands = []
 				try:
-					data = self.parse_frame()
-					if data == "":
-						continue
-					data = str(data, "utf-8")
-					if os.path.isfile(data + ".dot"):
-						with open(data + ".dot", "r") as graphfile:
-							content = graphfile.read()
-						self.send(self.request, content)
-					else:
-						print(self.identity + " requested nonexisting graph " + data)
+					commands = json.loads(data)
 				except:
-					print("\nClient from " + self.identity + " disconnected")
-					return
+					print("Client from "  + self.identity + " sended invalid json: \n" + data)
+				if commands[0] == "$REQUESTHISTORY":
+					packet = {}
+					for scheduler in commands[1]:
+						if not os.path.exists("snapshots/" + scheduler.split(":")[-1]):
+							print("Client from " + self.identity + " requested history of unkown scheduler: " + scheduler)
+							continue
+						path = "snapshots/" + scheduler.split(":")[-1]
+						files = [ f for f in listdir(path) if isfile(join(path,f)) ]
+						files = [int(i.strip(".dot")) for i in files]
+						packet[scheduler] = files
+					#because the json parser in javascript is facking retarded we add a placeholder item to the dictionary
+					packet["foo"] = []
+					self.send(self.request, json.dumps(packet))
+				elif commands[0] == "$REQUESTGRAPH":
+					file = "snapshots/" + commands[1].split(":")[-1] + "/" + str(commands[2]) + ".dot"
+					if not os.path.exists(file) or not os.path.isfile(file):
+						print("Client from " + self.identity + " requested non existing graph: " + file)
+						continue
+					with open(file, "r") as stream:
+						dotfile = stream.read()
+					self.send(self.request, json.dumps([commands[1] + "at: " + datetime.datetime.fromtimestamp(int(commands[2])).strftime('%Y-%m-%d %H:%M:%S'),dotfile]))
+				else:
+					print("Client from " + self.identity + " issued unkown command: " + commands[0])
+				# except:
+				# 	print("\nClient from " + self.identity + " disconnected")
+				# 	return
 		else:
 			#register this scheduler
 			self.client = "scheduler"
@@ -202,7 +233,9 @@ class ThreadedServerHandler(socketserver.BaseRequestHandler):
 class ThreadedTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
 	pass
 
-HOST = "192.168.137.211"
+parser = argparse.ArgumentParser(description="FrankFancyGraphStreamer to be used with RiSCHER scheduler")
+parser.add_argument('--ip', nargs='?', const=1, type=str, default="localhost", help="ip which the server will bind to")
+HOST = parser.parse_args().ip
 PORT = 600
 if not os.path.exists("snapshots"):
 	os.makedirs("snapshots")
