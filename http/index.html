@@ -24,11 +24,42 @@
 		<link href="css/metro.css" rel="stylesheet">
 		<script src="js/metro.js"></script>
 
+		<style>
+		.login-form {
+				width: 550px;
+				height: 470px;
+				position: fixed;
+				top: 50%;
+				margin-top: -150px;
+				left: 50%;
+				margin-left: -200px;
+				background-color: #ffffff;
+				opacity: 0;
+				-webkit-transform: scale(.8);
+				transform: scale(.8);
+		}
+		.hidden { display: none; }
+		</style>
+
+		<script>
+		$(function(){
+				var form = $(".login-form");
+
+				form.css({
+						opacity: 1,
+						"-webkit-transform": "scale(1)",
+						"transform": "scale(1)",
+						"-webkit-transition": ".5s",
+						"transition": ".5s"
+				});
+		});
+		</script>
+
 		<script type="text/javascript">
 		//global variables
 		var dotdata = "digraph testgraph{{node[shape=none,fontsize=23]\"Welcome to Liviz.js!\"}{node[shape=none]\"Interactive GraphViz on your browser\"}{edge[color=transparent]\"Welcome to Liviz.js!\" ->\"Interactive GraphViz on your browser\"}A -> B -> C -> D -> E;	B -> D;{node[shape=box];1 -> 2 -> 3;}E -> 1;2 -> C;{rank=same; 1; A;}{rank=same; 3; D;}}";
 		var identity = "testserver1";
-		var state = 0; //0: open for new graphs 1: busy with receiving graphparts, 2: requested history, 3: receiving history
+		var state = 0; //-1: logging in 0: open for new graphs 1: busy with receiving graphparts, 2: requested history, 3: receiving history
 		var menudata = "";
 		var schedulers  = ["aaaa::215:8d00:57:6466", "aaaa::215:8d00:57:1234"];
 		var menu = {
@@ -36,21 +67,65 @@
 			"aaaa::215:8d00:57:1234" : []
 		};
 
-		window.connect = function connect(){
-		var socket;
-		var host = "ws://192.168.7.102:600";
+		window.bootup = function bootup()
+		{
+			var loginpacket = {
+				"name" 				: $("#user_name").val(),
+				"password" 		: $("#user_password").val(),
+				"schedulers"	: $("#user_schedulers").val()
+			};
+
+			window.schedulers = $("#user_schedulers").val().split(";");
+			var form = $(".login-form");
+
+			form.css({
+					opacity: 0,
+					"-webkit-transform": "scale(1)",
+					"transform": "scale(1)",
+					"-webkit-transition": ".5s",
+					"transition": ".5s"
+			});
+			$('#login').delay(500).fadeOut();
+
+			// console.log("ws://" + $("#user_serverip").val() + ":600");
+			window.state = -1;
+			window.connect("ws://" + $("#user_serverip").val() + ":600", JSON.stringify(loginpacket));
+		}
+
+		window.connect = function connect(host, loginpackage){
+		// var socket;
+		// var host = "ws://192.168.7.102:600";
 
 		try{
-			var socket = new WebSocket(host);
+			window.socket = new WebSocket(host);
 			// message('<p class="event">Socket Status: '+socket.readyState);
 			socket.onopen = function(){
 				console.log('Socket Status: '+socket.readyState+' (open)');
-				login();
+				socket.send(loginpackage);
 			}
 
 			socket.onmessage = function(msg){
 				switch(window.state)
 				{
+					case -1:
+						if(msg.data != "OK")
+						{
+							setTimeout(function(){
+								$.Notify({type: 'alert', caption: 'Alert', content: "Server refused login!"});
+							}, 2000);
+							socket.close()
+						}
+						else
+						{
+							setTimeout(function(){
+									$.Notify({type: 'success', caption: 'Success', content: "Login succesfull, booting app"});
+							}, 2000);
+							window.state = 0;
+							$("#app").removeClass("hidden");
+							w_launch();
+							RequestUpdateMenu();
+						}
+						break;
 					case 0:
 						if(msg.data == "$STARTGRAPH")
 						{
@@ -111,6 +186,9 @@
 
 			socket.onclose = function(){
 				console.log('Socket Status: '+socket.readyState+' (Closed)');
+				setTimeout(function(){
+					$.Notify({type: 'alert', caption: 'Alert', content: "Server websocket collapsed."});
+				}, 2000);
 			}
 
 		} catch(exception){
@@ -125,13 +203,6 @@
 			window.startDot();
 		}
 		window.socket = socket;
-	}
-
-	window.login = function login()
-	{
-		socket.send(identity);
-		socket.send(JSON.stringify(schedulers));
-		RequestUpdateMenu();
 	}
 
 	window.RequestUpdateMenu = function RequestUpdateMenu()
@@ -172,6 +243,9 @@
 		html += "</div>\n";
 		console.log(html);
 		$("#controls").html(html);
+		setTimeout(function(){
+				$.Notify({type: 'info', caption: 'Info', content: "Menu updated"});
+		}, 2000);
 	}
 
 	window.RequestDotFile = function RequestDotFile(scheduler, dotname)
@@ -183,13 +257,50 @@
 
 	<title>RiSCHER FrankFancyGraphStreamer</title>
 	</head>
-	<body class="app-page" onload="void w_launch();">
-		<div id="info">info about current graph here</div>
-		<div id="controls" style="width: 20%;">
-			menu here
+	<body class="app-page"> <!--onload="void w_launch();">-->
+		<div class="login-form padding20 block-shadow" id="login">
+        <form onsubmit="window.bootup(); return false;">
+            <h1 class="text-light">Login to RiSCHER Network</h1>
+            <hr class="thin"/>
+            <br />
+            <div class="input-control text full-size" data-role="input">
+                <label for="user_login">Username:</label>
+                <input type="text" name="user_login" id="user_name">
+            </div>
+            <br />
+            <br />
+            <div class="input-control password full-size" data-role="input">
+                <label for="user_password">Password:</label>
+                <input type="password" name="user_password" id="user_password">
+            </div>
+            <br />
+            <br />
+						<div class="input-control text full-size" data-role="input">
+								<label for="user_schedulers">Requested Schedulers (csv format):</label>
+								<input type="text" name="user_schedulers" id="user_schedulers">
+						</div>
+						<br />
+						<br />
+						<div class="input-control text full-size" data-role="input">
+								<label for="user_serverip">StreamServerIp:</label>
+								<input type="text" name="user_serverip" id="user_serverip">
+						</div>
+						<br />
+						<br />
+            <div class="form-actions">
+                <button type="submit" class="button primary">Login to...</button>
+                <button type="button" class="button link">Cancel</button>
+            </div>
+        </form>
+    </div>
+		<div id="app" class="hidden">
+			<div id="info">info about current graph here</div>
+			<div id="controls" style="width: 20%;">
+				menu here
+			</div>
+			<div id="coding-area">
+			<svg id="graph-svg" style="outline: none;" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><g id="mainGraphContainer" /></svg>
 		</div>
-		<div id="coding-area">
-		<svg id="graph-svg" style="outline: none;" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><g id="mainGraphContainer" /></svg>
 	</div>
 	</body>
 </html>

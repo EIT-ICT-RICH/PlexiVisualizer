@@ -11,11 +11,16 @@ from os import listdir
 from os.path import isfile, join
 import argparse
 import datetime
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from os.path import splitext, basename
+import mimetypes
+import sys
 
 connectedclients = {}
 connectedSchedulers = {}
 client_schedulers = {}#key: client identity, value: list of requested schedulers
 scheduler_clients = {}#key: scheduler identity, value: list of sockets that listen to this scheduler
+users = {}#key: username, value: dict: password: password of user, schedulers: list of allowed schedulers
 
 def chunks(l, n):
 	#Yield successive n-sized chunks from l
@@ -25,7 +30,7 @@ def chunks(l, n):
 class ThreadedServerHandler(socketserver.BaseRequestHandler):
 
 	def handle(self):
-		# addr = self.request.getpeername()[0]
+		addr = self.request.getpeername()[0]
 		self.data = self.request.recv(1024)
 		request = str(self.data, "utf-8")
 		# print("request:\n" + request)
@@ -36,21 +41,39 @@ class ThreadedServerHandler(socketserver.BaseRequestHandler):
 
 			#get the identity
 			data = self.parse_frame()
-			self.identity = str(data, "utf-8")
+			userdata = {}
+			try:
+				userdata = json.loads(str(data, "utf-8"))
+			except:
+				print("problem with login package from " + str(addr))
+
+			self.identity = userdata["name"]
+			if self.identity not in users:
+				print("Wrong login for user " + self.identity + " from " + str(addr))
+				self.send(self.request, "WRONG")
+				return
+
+			if users[self.identity]["password"] != userdata["password"]:
+				print("Wrong login for user " + self.identity + " from " + str(addr))
+				self.send(self.request, "WRONG")
+				return
+
+			#crossreference the scheduler list with the allowed list
+			schedulers = list(set(userdata["schedulers"]) & set(users[self.identity]["schedulers"]))
 			#register the client
 			connectedclients[self.identity] = self
-			#register the requested schedulers
-			data = str(self.parse_frame(), "utf-8")
-			print("requested schedulers: ")
-			print(data)
-			client_schedulers[self.identity] = json.loads(data)
+			# #register the requested schedulers
+			# data = str(self.parse_frame(), "utf-8")
+			# print("requested schedulers: ")
+			# print(userdata[2])
+			client_schedulers[self.identity] = schedulers
 			for shd in client_schedulers[self.identity]:
 				try:
 					scheduler_clients[shd].append(self)
 				except:
 					scheduler_clients[shd] = []
 					scheduler_clients[shd].append(self)
-
+			self.send(self.request,"OK")
 			#wait for requests
 			print("New connection(webclient): " + self.identity)
 			while True:
@@ -233,8 +256,89 @@ class ThreadedServerHandler(socketserver.BaseRequestHandler):
 class ThreadedTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
 	pass
 
+class httpRequestHandler(BaseHTTPRequestHandler):
+
+	def do_GET(self):
+		allowedtypes = [".html", ".css", ".js"]
+		# origin = self.request.getpeername()[0]
+		# rootdir = "D:/PycharmProjects/Kolibri_Chat/http"
+		filetype =  splitext(basename(self.path))[1].split("?")[0]
+		rootdir = "http"
+		if filetype not in allowedtypes and filetype != "":
+			self.send_response(403)
+			# Print("Client from " + origin + " asked for forbidden file " + self.path)
+			return
+
+		if self.path == "/":
+			filepath = rootdir + "/index.html"
+			filetype = ".html"
+		else:
+			filepath = rootdir + self.path.split("?")[0]
+
+		try:
+			stream = open(filepath, 'rb')
+		except IOError:
+			# Print("GET request to nonexisting file " + self.path + " from client " + origin)
+			self.send_response(404)
+			return
+
+		self.send_response(200)
+		try:
+			mime = mimetypes.types_map[filetype]
+		except:
+			mime = 'application/octet-stream'
+		self.send_header('content-type', mime)
+		self.end_headers()
+		self.wfile.write(stream.read())
+		stream.close()
+		# Print("GET request to file " + self.path + " answered to client " + origin)
+		return
+
+
+	def do_POST(self):
+		self.send_response(403)
+		# ctype, pdict = cgi.parse_header(self.headers.getheader('content-type'))
+		# if ctype == 'multipart/form-data':
+		# 	postvars = cgi.parse_multipart(self.rfile, pdict)
+		# elif ctype == 'application/x-www-form-urlencoded':
+		# 	length = int(self.headers.getheader('content-length'))
+		# 	postvars = cgi.parse_qs(self.rfile.read(length), keep_blank_values=1)
+		# else:
+		# 	postvars = {}
+		return
+
+	def log_message(self, format, *args):
+		pass
+		# sys.stderr.write("%s - - [%s] %s\n" %
+		# 				 (self.address_string(),
+		# 				  self.log_date_time_string(),
+		# 				  format%args))
+
+def ReadDatabase():
+	try:
+		database = open("users.txt", "r")
+		count = 0
+		for line in database:
+			count += 1
+			parts = line.split("$")
+			users[parts[0]] = {
+				"password" : parts[1],
+				"schedulers" : parts[2].split(";")
+			}
+			# users.append([line.split(" ")[0].strip("\n"), line.split(" ")[1], int(line.split(" ")[2]), int(line.split(" ")[3].strip("\n"))])
+		database.close()
+		print("read "+str(count)+" users from file to database")
+
+	except:
+		print("ERROR: failed reading database, server will now exit")
+		time.sleep(1)
+		database.close()
+		sys.exit()
+		
 parser = argparse.ArgumentParser(description="FrankFancyGraphStreamer to be used with RiSCHER scheduler")
 parser.add_argument('--ip', nargs='?', const=1, type=str, default="localhost", help="ip which the server will bind to")
+ReadDatabase()
+print("booting StreamServer and http server")
 HOST = parser.parse_args().ip
 PORT = 600
 if not os.path.exists("snapshots"):
@@ -243,7 +347,9 @@ server = ThreadedTCPServer((HOST, PORT), ThreadedServerHandler)
 server_thread = threading.Thread(target=server.serve_forever)
 server_thread.daemon = True
 server_thread.start()
-print("server started, waiting for connections...")
-
-while True:
-	pass
+print("StreamServer running at " + str(PORT) + ", waiting for connections...")
+mimetypes.init()
+server_address = (HOST, 80)
+server = HTTPServer(server_address, httpRequestHandler)
+print("http server is running at " + server_address[0] + ":" + str(server_address[1]))
+server.serve_forever()
