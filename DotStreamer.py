@@ -27,6 +27,37 @@ def chunks(l, n):
 	for i in range(0, len(l), n):
 		yield l[i:i+n]
 
+class Cell():
+	def __init__(self, nodeid, localid, frame, status, empty=False):
+		self._nodeid = nodeid.strip("[").split("]")[0].split(":")[-1]
+		self._localid = localid
+		self._frame = frame
+		self._empty = empty
+		self._status = status
+
+	@property
+	def nodeid(self):
+		return self._nodeid
+
+	@property
+	def localid(self):
+		return self._localid
+
+	@property
+	def frame(self):
+		return self._frame
+
+	#based on: 0:available 1:used 2: blacklisted
+	@property
+	def status(self):
+		return self._status
+
+	def __str__(self):
+		if not self._empty:
+			return "Node:" + self._nodeid + "<br>frame:" + self._frame + "<br>localid:" + self._localid
+		else:
+			return "Emtpy cell"
+
 class ThreadedServerHandler(socketserver.BaseRequestHandler):
 
 	def handle(self):
@@ -34,7 +65,7 @@ class ThreadedServerHandler(socketserver.BaseRequestHandler):
 		self.data = self.request.recv(1024)
 		request = str(self.data, "utf-8")
 		# print("request:\n" + request)
-		if "Upgrade: websocket" in request:
+		if "Upgrade: websocket" in request or "Upgrade: Websocket" in request:
 
 			self.HandShake(request)
 			self.client = "web"
@@ -59,7 +90,7 @@ class ThreadedServerHandler(socketserver.BaseRequestHandler):
 				return
 
 			#crossreference the scheduler list with the allowed list
-			schedulers = list(set(userdata["schedulers"]) & set(users[self.identity]["schedulers"]))
+			schedulers = list(set(userdata["schedulers"].split(";")) & set(users[self.identity]["schedulers"]))
 			#register the client
 			connectedclients[self.identity] = self
 			# #register the requested schedulers
@@ -77,51 +108,46 @@ class ThreadedServerHandler(socketserver.BaseRequestHandler):
 			#wait for requests
 			print("New connection(webclient): " + self.identity)
 			while True:
-				# try:
-				data = self.parse_frame()
-				if data == "":
-					continue
-				data = str(data, "utf-8")
-				# if os.path.isfile(data + ".dot"):
-				# 	with open(data + ".dot", "r") as graphfile:
-				# 		content = graphfile.read()
-				# 	self.send(self.request, content)
-				# else:
-				# 	print(self.identity + " requested nonexisting graph " + data)
-				commands = []
 				try:
-					commands = json.loads(data)
-				except:
-					print("Client from "  + self.identity + " sended invalid json: \n" + data)
-				if commands[0] == "$REQUESTHISTORY":
-					packet = {}
-					for scheduler in commands[1]:
-						if not os.path.exists("snapshots/" + scheduler.split(":")[-1]):
-							print("Client from " + self.identity + " requested history of unkown scheduler: " + scheduler)
-							continue
-						path = "snapshots/" + scheduler.split(":")[-1]
-						files = [ f for f in listdir(path) if isfile(join(path,f)) ]
-						files = [int(i.strip(".dot")) for i in files]
-						packet[scheduler] = files
-					#because the json parser in javascript is facking retarded we add a placeholder item to the dictionary
-					packet["foo"] = []
-					self.send(self.request, json.dumps(packet))
-				elif commands[0] == "$REQUESTGRAPH":
-					file = "snapshots/" + commands[1].split(":")[-1] + "/" + str(commands[2]) + ".dot"
-					if not os.path.exists(file) or not os.path.isfile(file):
-						print("Client from " + self.identity + " requested non existing graph: " + file)
+					data = self.parse_frame()
+					if data == "":
 						continue
-					with open(file, "r") as stream:
-						dotfile = stream.read()
-					self.send(self.request, json.dumps([commands[1] + "at: " + datetime.datetime.fromtimestamp(int(commands[2])).strftime('%Y-%m-%d %H:%M:%S'),dotfile]))
-				else:
-					print("Client from " + self.identity + " issued unkown command: " + commands[0])
-				# except:
-				# 	print("\nClient from " + self.identity + " disconnected")
-				# 	return
+					data = str(data, "utf-8")
+					commands = []
+					try:
+						commands = json.loads(data)
+					except:
+						print("Client from "  + self.identity + " sended invalid json: \n" + data)
+					if commands[0] == "$REQUESTHISTORY":
+						packet = {}
+						for scheduler in commands[1]:
+							if not os.path.exists("snapshots/" + scheduler.split(":")[-1]):
+								print("Client from " + self.identity + " requested history of unkown scheduler: " + scheduler)
+								continue
+							path = "snapshots/" + scheduler.split(":")[-1]
+							files = [ f for f in listdir(path) if isfile(join(path,f)) ]
+							files = [int(i.strip(".dot")) for i in files]
+							packet[scheduler] = files
+						#because the json parser in javascript is facking retarded we add a placeholder item to the dictionary
+						packet["foo"] = []
+						self.send(self.request, json.dumps(packet))
+					elif commands[0] == "$REQUESTGRAPH":
+						file = "snapshots/" + commands[1].split(":")[-1] + "/" + str(commands[2]) + ".dot"
+						if not os.path.exists(file) or not os.path.isfile(file):
+							print("Client from " + self.identity + " requested non existing graph: " + file)
+							continue
+						with open(file, "r") as stream:
+							dotfile = stream.read()
+						self.send(self.request, json.dumps([commands[1] + "at: " + datetime.datetime.fromtimestamp(int(commands[2])).strftime('%Y-%m-%d %H:%M:%S'),dotfile]))
+					else:
+						print("Client from " + self.identity + " issued unkown command: " + commands[0])
+				except:
+					print("\nClient from " + self.identity + " disconnected")
+					return
 		else:
 			#register this scheduler
 			self.client = "scheduler"
+			self.frames = {}
 			connectedSchedulers[request] = self
 			self.identity = request
 			if self.identity not in scheduler_clients:
@@ -131,18 +157,53 @@ class ThreadedServerHandler(socketserver.BaseRequestHandler):
 			self.folder = "snapshots/" + self.identity.split(":")[-1]
 			if not os.path.exists(self.folder):
 				os.makedirs(self.folder)
+			data = str(self.request.recv(1024), "utf-8")
+			jsondata = json.loads(data)
+			#create matrix with empty cells
+			for framedata in jsondata:
+				self.frames[framedata["id"]] = []
+				for y in range(0, 16):
+					self.frames[framedata["id"]].append([])
+					for x in range(0, framedata["cells"]):
+						self.frames[framedata["id"]][y].append(Cell("","","", 0,empty=True))
+
 			while True:
 				data = str(self.request.recv(1024), "utf-8")
 				if data == "":
 					continue
-				#for each listener, send the dot file
-				print("dotfile received:")
+				print("data received:")
 				print(data)
-				info = json.loads(data)
-				with open(self.folder + "/" + str(int(time.time())) + ".dot", "w") as stream:
-					stream.writelines(info[1])
-				for client in scheduler_clients[self.identity]:
-					self.send(client.request, data)
+				#check if data is dotfile or json
+				jsondata = json.loads(data)
+				if jsondata[0] == "newcell":
+					cell = jsondata[1]
+					#channels are on y axis slots are on x axis
+					#change the cell in the correct frame, this overwrites any possible existing cells
+					newcell = Cell(cell["who"], cell["id"], cell["frame"], cell["status"])
+					self.frames[cell["frame"]][cell["channeloffs"]][cell["slotoffs"]] = newcell
+					#package to be send to observers
+					#[y, x, description, status]
+					package = json.dumps([[cell["channeloffs"],cell["slotoffs"]],str(newcell), newcell.status])
+					#send it to all observers
+					for client in scheduler_clients[self.identity]:
+						self.send(client.request, package, t=1)
+					# elif jsondata[1] == "newframe":
+					# 	framedata = jsondata[1]
+					# 	#create matrix with empty cells
+					# 	self.frames[framedata["id"]] = []
+					# 	for y in range(0, 16):
+					# 		self.frames[framedata["id"]].append([])
+					# 		for x in range(0, framedata["cells"]):
+					# 			self.frames[y].append(Cell("","","", 0,empty=True))
+				else:
+					#its a dotfile
+					#for each listener, send the dot file
+					print("dotfile received")
+					# info = json.loads(data)
+					with open(self.folder + "/" + str(int(time.time())) + ".dot", "w") as stream:
+						stream.writelines(jsondata[1])
+					for client in scheduler_clients[self.identity]:
+						self.send(client.request, data)
 
 	def HandShake(self, request):
 		specificationGUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
@@ -167,16 +228,30 @@ class ThreadedServerHandler(socketserver.BaseRequestHandler):
 		# print(handshake.strip("\n"))
 		self.request.send(bytes(handshake, "utf-8"))
 
-	def send(self, socket, data):
-		print("sending data: " + data)
-		if len(data) < 126:
-			socket.sendall(self.create_frame(data))
-			return
-		c = chunks(data, 125)
-		socket.sendall(self.create_frame("$STARTGRAPH"))
-		for co in c:
-			socket.sendall(self.create_frame(co))
-		socket.sendall(self.create_frame("$ENDGRAPH"))
+	#t: 0= sending of graph stuff 1=sending of matrix updates
+	def send(self, socket, data, t=0):
+		if t == 0:
+			print("sending data: " + data)
+			if len(data) < 126:
+				socket.sendall(self.create_frame(data))
+				return
+			c = chunks(data, 125)
+			socket.sendall(self.create_frame("$STARTGRAPH"))
+			for co in c:
+				socket.sendall(self.create_frame(co))
+			socket.sendall(self.create_frame("$ENDGRAPH"))
+		elif t == 1:
+			print("sending data: " + data)
+			if len(data) < 126:
+				socket.sendall(self.create_frame("$STARTMATRIXUPDATE"))
+				socket.sendall(self.create_frame(data))
+				socket.sendall(self.create_frame("$ENDMATRIXUPDATE"))
+				return
+			c = chunks(data, 125)
+			socket.sendall(self.create_frame("$STARTMATRIXUPDATE"))
+			for co in c:
+				socket.sendall(self.create_frame(co))
+			socket.sendall(self.create_frame("$ENDMATRIXUPDATE"))
 
 
 	def create_frame(self, data):
@@ -334,22 +409,23 @@ def ReadDatabase():
 		time.sleep(1)
 		database.close()
 		sys.exit()
-		
-parser = argparse.ArgumentParser(description="FrankFancyGraphStreamer to be used with RiSCHER scheduler")
-parser.add_argument('--ip', nargs='?', const=1, type=str, default="localhost", help="ip which the server will bind to")
-ReadDatabase()
-print("booting StreamServer and http server")
-HOST = parser.parse_args().ip
-PORT = 600
-if not os.path.exists("snapshots"):
-	os.makedirs("snapshots")
-server = ThreadedTCPServer((HOST, PORT), ThreadedServerHandler)
-server_thread = threading.Thread(target=server.serve_forever)
-server_thread.daemon = True
-server_thread.start()
-print("StreamServer running at " + str(PORT) + ", waiting for connections...")
-mimetypes.init()
-server_address = (HOST, 80)
-server = HTTPServer(server_address, httpRequestHandler)
-print("http server is running at " + server_address[0] + ":" + str(server_address[1]))
-server.serve_forever()
+
+if __name__ == "__main__":
+	parser = argparse.ArgumentParser(description="FrankFancyGraphStreamer to be used with RiSCHER scheduler")
+	parser.add_argument('--ip', nargs='?', const=1, type=str, default="localhost", help="ip which the server will bind to")
+	ReadDatabase()
+	print("booting StreamServer and http server")
+	HOST = parser.parse_args().ip
+	PORT = 600
+	if not os.path.exists("snapshots"):
+		os.makedirs("snapshots")
+	server = ThreadedTCPServer((HOST, PORT), ThreadedServerHandler)
+	server_thread = threading.Thread(target=server.serve_forever)
+	server_thread.daemon = True
+	server_thread.start()
+	print("StreamServer running at " + str(PORT) + ", waiting for connections...")
+	mimetypes.init()
+	server_address = (HOST, 80)
+	server = HTTPServer(server_address, httpRequestHandler)
+	print("http server is running at " + server_address[0] + ":" + str(server_address[1]))
+	server.serve_forever()
