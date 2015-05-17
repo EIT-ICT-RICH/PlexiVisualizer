@@ -3319,11 +3319,13 @@ a.tag {
   .grid:not(.no-responsive-future) .row {
     margin: 0;
   }
-  .grid:not(.no-responsive-future) .row .cell {
-    width: 48.936175% !important;
-    margin-bottom: 10px !important;
+  .grid:not(.no-responsive-future) .row > .cell,
+  .grid:not(.no-responsive-future) .row > .cell[class*=colspan] {
+    width: 48.936175% ;
+    margin-bottom: 10px;
   }
-  .grid:not(.no-responsive-future) .row .cell:nth-child(odd) {
+  .grid:not(.no-responsive-future) .row > .cell:nth-child(odd),
+  .grid:not(.no-responsive-future) .row > .cell[class*=colspan]:nth-child(odd) {
     margin-left: 0;
   }
 }
@@ -3331,9 +3333,10 @@ a.tag {
   .grid:not(.no-responsive-future) .row {
     margin: 0;
   }
-  .grid:not(.no-responsive-future) .row .cell {
-    width: 100% !important;
-    margin: .3125rem 0 !important;
+  .grid:not(.no-responsive-future) .row > .cell,
+  .grid:not(.no-responsive-future) .row > .cell[class*=colspan] {
+    width: 100%;
+    margin: .3125rem 0;
   }
 }
 .grid.condensed {
@@ -3610,11 +3613,13 @@ a.tag {
   .grid.condensed:not(.no-responsive-future) .row {
     margin: 0;
   }
-  .grid.condensed:not(.no-responsive-future) .row .cell {
-    width: 50% !important;
-    margin-bottom: 10px !important;
+  .grid.condensed:not(.no-responsive-future) .row > .cell,
+  .grid.condensed:not(.no-responsive-future) .row > .cell[class*=colspan] {
+    width: 50% ;
+    margin-bottom: 10px ;
   }
-  .grid.condensed:not(.no-responsive-future) .row .cell:nth-child(odd) {
+  .grid.condensed:not(.no-responsive-future) .row > .cell:nth-child(odd),
+  .grid.condensed:not(.no-responsive-future) .row > .cell[class*=colspan]:nth-child(odd) {
     margin-left: 0;
   }
 }
@@ -3622,9 +3627,10 @@ a.tag {
   .grid.condensed:not(.no-responsive-future) .row {
     margin: 0;
   }
-  .grid.condensed:not(.no-responsive-future) .row .cell {
-    width: 100% !important;
-    margin: .3125rem 0 !important;
+  .grid.condensed:not(.no-responsive-future) .row > .cell,
+  .grid.condensed:not(.no-responsive-future) .row > .cell[class*=colspan] {
+    width: 100%;
+    margin: .3125rem 0;
   }
 }
 .table {
@@ -3983,6 +3989,24 @@ a.tag {
 }
 .app-bar .app-bar-element > .image-button img.icon {
   padding: 0;
+}
+.app-bar.drop-up .app-bar-drop-container {
+  top: auto;
+  bottom: 3.75rem;
+}
+.app-bar.drop-up .app-bar-drop-container:before {
+  top: auto;
+  bottom: 1px;
+  -webkit-transform: rotate(225deg);
+          transform: rotate(225deg);
+}
+.app-bar.drop-up .app-bar-menu > li > .d-menu {
+  top: auto;
+  bottom: 3.125rem;
+}
+.app-bar.drop-up .d-menu .d-menu {
+  top: auto !important;
+  bottom: 0 !important;
 }
 .app-bar.fixed-top,
 .app-bar.fixed-bottom {
@@ -12416,13 +12440,13 @@ p [data-hint] {
   margin-left: 213px !important;
 }
 .streamer .events .margin-double {
-  margin-left: 424px !important;
+  margin-left: 426px !important;
 }
 .streamer .events .margin-triple {
-  margin-left: 637px !important;
+  margin-left: 639px !important;
 }
 .streamer .events .margin-quadro {
-  margin-left: 850px !important;
+  margin-left: 852px !important;
 }
 .streamer .events .events-area {
   height: 100%;

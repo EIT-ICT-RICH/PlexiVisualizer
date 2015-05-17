@@ -20,6 +20,9 @@ connectedclients = {}
 connectedSchedulers = {}
 client_schedulers = {}#key: client identity, value: list of requested schedulers
 scheduler_clients = {}#key: scheduler identity, value: list of sockets that listen to this scheduler
+scheduler_frames = {
+	"aaaa::215:8d00:57:6466" : ["Broadcast-Frame", "Unicast-Frame"]
+}#key: scheduler identity, value: list of framenames
 users = {}#key: username, value: dict: password: password of user, schedulers: list of allowed schedulers
 
 def chunks(l, n):
@@ -54,7 +57,10 @@ class Cell():
 
 	def __str__(self):
 		if not self._empty:
-			return "Node:" + self._nodeid + "<br>frame:" + self._frame + "<br>localid:" + self._localid
+			if self._status == 0:
+				return "Not Used"
+			else:
+				return "Node:" + self._nodeid + "<br>frame:" + self._frame + "<br>localid:" + self._localid
 		else:
 			return "Emtpy cell"
 
@@ -105,6 +111,10 @@ class ThreadedServerHandler(socketserver.BaseRequestHandler):
 					scheduler_clients[shd] = []
 					scheduler_clients[shd].append(self)
 			self.send(self.request,"OK")
+			#TODO: multiple schedulers support for the frame streaming
+			#send the frames for the scheduler (only the first one is supported atm
+			frames = scheduler_frames[schedulers[0]]
+			self.send(self.request,json.dumps(frames))
 			#wait for requests
 			print("New connection(webclient): " + self.identity)
 			while True:
@@ -159,9 +169,13 @@ class ThreadedServerHandler(socketserver.BaseRequestHandler):
 				os.makedirs(self.folder)
 			data = str(self.request.recv(1024), "utf-8")
 			jsondata = json.loads(data)
+			scheduler_frames[self.identity] = []
 			#create matrix with empty cells
 			for framedata in jsondata:
 				self.frames[framedata["id"]] = []
+				scheduler_frames[self.identity].append(framedata["id"])
+				#TODO: send update of these frames to clients
+				#TODO: dynamic sending off ammount of cells to the client (currently hardcoded to 25)
 				for y in range(0, 16):
 					self.frames[framedata["id"]].append([])
 					for x in range(0, framedata["cells"]):
@@ -175,7 +189,7 @@ class ThreadedServerHandler(socketserver.BaseRequestHandler):
 				print(data)
 				#check if data is dotfile or json
 				jsondata = json.loads(data)
-				if jsondata[0] == "newcell":
+				if jsondata[0] == "changecell":
 					cell = jsondata[1]
 					#channels are on y axis slots are on x axis
 					#change the cell in the correct frame, this overwrites any possible existing cells
@@ -183,18 +197,11 @@ class ThreadedServerHandler(socketserver.BaseRequestHandler):
 					self.frames[cell["frame"]][cell["channeloffs"]][cell["slotoffs"]] = newcell
 					#package to be send to observers
 					#[y, x, description, status]
-					package = json.dumps([[cell["channeloffs"],cell["slotoffs"]],str(newcell), newcell.status])
+					package = json.dumps([[cell["channeloffs"],cell["slotoffs"]], cell["frame"],str(newcell), newcell.status])
+					print(package)
 					#send it to all observers
 					for client in scheduler_clients[self.identity]:
 						self.send(client.request, package, t=1)
-					# elif jsondata[1] == "newframe":
-					# 	framedata = jsondata[1]
-					# 	#create matrix with empty cells
-					# 	self.frames[framedata["id"]] = []
-					# 	for y in range(0, 16):
-					# 		self.frames[framedata["id"]].append([])
-					# 		for x in range(0, framedata["cells"]):
-					# 			self.frames[y].append(Cell("","","", 0,empty=True))
 				else:
 					#its a dotfile
 					#for each listener, send the dot file

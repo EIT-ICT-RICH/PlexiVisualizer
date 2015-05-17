@@ -42,13 +42,13 @@
 		</style>
 
 		<style>
-		#matrix.load {
+		.matrix.load {
 		  -webkit-opacity: 1;
 		  -moz-opacity: 1;
 		  opacity: 1;
 		}
 
-		#matrix {
+		.matrix {
 		  -webkit-opacity: 0.1;
 		  -moz-opacity: 0.1;
 		  opacity: 0.1;
@@ -79,10 +79,10 @@
 		//global variables
 		var dotdata = "digraph testgraph{{node[shape=none,fontsize=23]\"Welcome to Liviz.js!\"}{node[shape=none]\"Interactive GraphViz on your browser\"}{edge[color=transparent]\"Welcome to Liviz.js!\" ->\"Interactive GraphViz on your browser\"}A -> B -> C -> D -> E;	B -> D;{node[shape=box];1 -> 2 -> 3;}E -> 1;2 -> C;{rank=same; 1; A;}{rank=same; 3; D;}}";
 		var identity = "testserver1";
-		var state = 0; //-1: logging in 0: open for new graphs 1: busy with receiving graphparts, 2: requested history, 3: receiving history, 4: receiving matrix info
+		var state = 0; //-2: receiving boot info, -1: logging in 0: open for new graphs 1: busy with receiving graphparts, 2: requested history, 3: receiving history, 4: receiving matrix info
 		var menudata = "";
 		var matrixdata = "";
-		var matrix = [];
+		var matrix = {};
 		var schedulers  = ["aaaa::215:8d00:57:6466", "aaaa::215:8d00:57:1234"];
 		var menu = {
 			"aaaa::215:8d00:57:6466" : [],
@@ -112,16 +112,6 @@
 			// console.log("ws://" + $("#user_serverip").val() + ":600");
 			window.state = -1;
 			window.connect("ws://" + $("#user_serverip").val() + ":600", JSON.stringify(loginpacket));
-
-			//init the matrix
-			for(var y = 0; y < 16; y++)
-			{
-				window.matrix.push([]);
-				for(var x = 0; x < 25; x++)
-				{
-					window.matrix[y].push([0,"Not Used"]);
-				}
-			}
 		}
 
 		window.connect = function connect(host, loginpackage){
@@ -139,23 +129,60 @@
 			socket.onmessage = function(msg){
 				switch(window.state)
 				{
-					case -1:
-						if(msg.data != "OK")
+					case -2:
+						frames = JSON.parse(msg.data);
+						//build html for tabcontrol for matrix
+						var html = "<div class=\"tabcontrol2\" data-role=\"tabControl\"><ul class=\"tabs\">";
+						for(var i = 0; i < frames.length; i++)
 						{
-							setTimeout(function(){
-								$.Notify({type: 'alert', caption: 'Alert', content: "Server refused login!"});
-							}, 2000);
-							socket.close()
+							html += "<li><a href=\"#" + frames[i] + "\">" + frames[i] + "</a></li>";
 						}
-						else
+						html += "</ul><div class=\"frames\">";
+						for(var i = 0; i < frames.length; i++)
 						{
-							setTimeout(function(){
-									$.Notify({type: 'success', caption: 'Success', content: "Login succesfull, booting app"});
-							}, 2000);
-							window.state = 0;
-							$("#app").removeClass("hidden");
-							w_launch();
-							RequestUpdateMenu();
+							html += "<div class=\"frame matrix\" id=\"" + frames[i] + "\"></div>";
+						}
+						html += "</div></div>";
+						$("#schedulestuff").html(html);
+						//init the matrices
+						for(var i = 0; i < frames.length; i++)
+						{
+							window.matrix[frames[i]] = [];
+							//init the matrix
+							for(var y = 0; y < 16; y++)
+							{
+								window.matrix[frames[i]].push([]);
+								for(var x = 0; x < 25; x++)
+								{
+									window.matrix[frames[i]][y].push([0,"Not Used"]);
+								}
+							}
+
+						}
+						window.state = 0;
+						$("#app").removeClass("hidden");
+						w_launch();
+						RequestUpdateMenu();
+						for(var i = 0; i < frames.length; i++)
+						{
+							window.RenderMatrix(frames[i]);
+						}
+						break;
+					case -1:
+						if(msg.data == "OK")
+						{
+								setTimeout(function(){
+										$.Notify({type: 'success', caption: 'Success', content: "Login succesfull, booting app"});
+								}, 2000);
+								window.state = -2;
+								console.log("first step");
+						}
+						else if(msg.data == "WRONG")
+						{
+								setTimeout(function(){
+									$.Notify({type: 'alert', caption: 'Alert', content: "Server refused login!"});
+								}, 2000);
+								socket.close()
 						}
 						break;
 					case 0:
@@ -301,11 +328,41 @@
 	window.UpdateMatrix = function UpdateMatrix()
 	{
 		var infopackage = JSON.parse(window.matrixdata);
-		window.matrix[infopackage[0][0]][infopackage[0][1]] = [infopackage[2], infopackage[1]];
-		window.RenderMatrix();
+		if(infopackage[3] == 2)
+		{
+			var cchannel = infopackage[0][0];
+			var cslot = infopackage[0][1];
+			while(1)
+			{
+				window.matrix[infopackage[1]][(cchannel+16)%16][cslot] = [2, "Blacklisted"];
+				cchannel += 1;
+				cslot += 1;
+				if (cslot >= 25)
+				{
+					break;
+				}
+			}
+			cchannel = infopackage[0][0] - 1;
+			cslot = infopackage[0][1] - 1;
+			while(1)
+			{
+				window.matrix[infopackage[1]][(cchannel+16)%16][cslot] = [2, "Blacklisted"];
+				cchannel -= 1;
+				cslot -= 1;
+				if (cslot < 0)
+				{
+					break;
+				}
+			}
+		}
+		else
+		{
+			window.matrix[infopackage[1]][infopackage[0][0]][infopackage[0][1]] = [infopackage[3], infopackage[2]];
+		}
+		window.RenderMatrix(infopackage[1]);
 	}
 
-	window.RenderMatrix = function RenderMatrix()
+	window.RenderMatrix = function RenderMatrix(frame)
 	{
 		//settings for this function
 		var widthmatrixp = 0.8; //in %/100
@@ -326,7 +383,7 @@
 		{
 			for(var x = 0; x < numx; x++)
 			{
-				var status = window.matrix[y][x][0];
+				var status = window.matrix[frame][y][x][0];
 				var color = "bg-black";
 
 				switch(status)
@@ -345,16 +402,16 @@
 				html += "<div class=\"tile-content slide-down\">";
 				html += "<div class=\"slide\">";
 				html += "</div><div class=\"slide-over bg-darkBlue\" style=\"font-size: 10px;\">";
-				html += window.matrix[y][x][1];
+				html += window.matrix[frame][y][x][1];
 				html += "</div></div></div>";
 			}
 		}
 
 		html += "</div>";
-		$("#matrix").removeClass("load");
+		$("#"+frame).removeClass("load");
 		setTimeout(function() {
-			$("#matrix").html(html);
-			$("#matrix").addClass("load");
+			$("#"+frame).html(html);
+			$("#"+frame).addClass("load");
 		}, 500);
 	}
 
@@ -413,9 +470,22 @@
 		</div>
 	</div>
 		<center>
-		<div id="matrix">
+			<div id="schedulestuff">
 
-		</div>
-	</center>
+			</div>
+			<!-- <div class="tabcontrol2" data-role="tabControl">
+				<ul class="tabs">
+					<li class="active"><a href="#frame1">frame1</a></li>
+					<li><a href="#frame2">frame2</a></li>
+				</ul>
+				<div class="frames">
+					<div class="frame" id="frame1">1</div>
+					<div class="frame" id="frame2">2</div>
+				</div>
+				<div id="matrix">
+
+				</div>
+			</div> -->
+		</center>
 	</body>
 </html>

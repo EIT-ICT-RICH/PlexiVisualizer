@@ -1,0 +1,6 @@
+.idea/*
+*.pyc
+*.png
+*.dot
+*.txt
+*.tar.gz
