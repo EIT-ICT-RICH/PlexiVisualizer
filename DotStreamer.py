@@ -65,7 +65,7 @@ class Cell():
 			return "Emtpy cell"
 
 class ThreadedServerHandler(socketserver.BaseRequestHandler):
-
+	#TODO: what if scheduler is alreayd running when user logs in, stream that data through
 	def handle(self):
 		addr = self.request.getpeername()[0]
 		self.data = self.request.recv(1024)
@@ -128,6 +128,7 @@ class ThreadedServerHandler(socketserver.BaseRequestHandler):
 						commands = json.loads(data)
 					except:
 						print("Client from "  + self.identity + " sended invalid json: \n" + data)
+					#TODO: check if the requested data is allowed (scheduler names)
 					if commands[0] == "$REQUESTHISTORY":
 						packet = {}
 						for scheduler in commands[1]:
@@ -153,6 +154,7 @@ class ThreadedServerHandler(socketserver.BaseRequestHandler):
 						print("Client from " + self.identity + " issued unkown command: " + commands[0])
 				except:
 					print("\nClient from " + self.identity + " disconnected")
+					#TODO: remove client from all data items to prevent trying to send to closed socket
 					return
 		else:
 			#register this scheduler
