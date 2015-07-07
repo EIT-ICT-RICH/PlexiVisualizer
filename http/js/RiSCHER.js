@@ -12,8 +12,10 @@ var menu = {
   "aaaa::215:8d00:57:1234" : []
 };
 
+//function that is called when the user clicks login
 window.bootup = function bootup()
 {
+  //build json login package
   var loginpacket = {
     "name" 				: $("#user_name").val(),
     "password" 		: $("#user_password").val(),
@@ -22,7 +24,7 @@ window.bootup = function bootup()
 
   window.schedulers = $("#user_schedulers").val().split(";");
   var form = $(".login-form");
-
+  //fade out and remove the login form
   form.css({
       opacity: 0,
       "-webkit-transform": "scale(1)",
@@ -33,26 +35,28 @@ window.bootup = function bootup()
   $('#login').delay(500).fadeOut();
 
   // console.log("ws://" + $("#user_serverip").val() + ":600");
+  //set the correct state and connect to the server
   window.state = -1;
   window.connect("ws://" + $("#user_serverip").val() + ":600", JSON.stringify(loginpacket));
 }
 
+//the function that sets up the connection
 window.connect = function connect(host, loginpackage){
-// var socket;
-// var host = "ws://192.168.7.102:600";
 
 try{
   window.socket = new WebSocket(host);
-  // message('<p class="event">Socket Status: '+socket.readyState);
+  //when the sockets opens send the loginpackage
   socket.onopen = function(){
     console.log('Socket Status: '+socket.readyState+' (open)');
     socket.send(loginpackage);
   }
 
+//handling incomming messages
   socket.onmessage = function(msg){
+    //parse incomming message depending on current state of the system
     switch(window.state)
     {
-      case -2:
+      case -2: //receiving boot info
         frames = JSON.parse(msg.data);
         //build html for tabcontrol for matrix
         var html = "<div class=\"tabcontrol2\" data-role=\"tabControl\"><ul class=\"tabs\">";
@@ -75,6 +79,7 @@ try{
           for(var y = 0; y < 16; y++)
           {
             window.matrix[frames[i]].push([]);
+            //HARDCODED 25 CELLS
             for(var x = 0; x < 25; x++)
             {
               window.matrix[frames[i]][y].push([0,"Not Used"]);
@@ -83,7 +88,9 @@ try{
 
         }
         window.state = 0;
+        //unhide the div
         $("#app").removeClass("hidden");
+        //and activate the graphviz javascript renderer
         w_launch();
         RequestUpdateMenu();
         for(var i = 0; i < frames.length; i++)
@@ -91,12 +98,14 @@ try{
           window.RenderMatrix(frames[i]);
         }
         break;
-      case -1:
+      case -1: //logging in
+      //check the status and give feedback to the user
         if(msg.data == "OK")
         {
             setTimeout(function(){
                 $.Notify({type: 'success', caption: 'Success', content: "Login succesfull, booting app"});
             }, 2000);
+            //change state to bootstrap
             window.state = -2;
             console.log("first step");
         }
@@ -105,10 +114,12 @@ try{
             setTimeout(function(){
               $.Notify({type: 'alert', caption: 'Alert', content: "Server refused login!"});
             }, 2000);
+            //close the socket as login has failed
             socket.close()
         }
         break;
-      case 0:
+      case 0: //open for new graphs
+        //implemented statemachine because of splitting of dot files. see python code for more info
         if(msg.data == "$STARTGRAPH")
         {
           console.debug("started receiving graph");
@@ -128,7 +139,7 @@ try{
           window.ParsePacket();
         }
         break;
-      case 1:
+      case 1: //busy with receiving graphparts
         if(msg.data == "$ENDGRAPH")
         {
           console.debug("ended receiving graph");
@@ -140,7 +151,8 @@ try{
           window.dotdata = window.dotdata + msg.data;
         }
         break;
-      case 2:
+      case 2: //requested history
+      //again statemachine
         if(msg.data == "$STARTGRAPH")
         {
           console.debug("started receiving stuff");
@@ -155,7 +167,7 @@ try{
           window.ParseMenu();
         }
         break;
-      case 3:
+      case 3: //receiving history
         if(msg.data == "$ENDGRAPH")
         {
           console.debug("ended receiving stuff");
@@ -167,7 +179,8 @@ try{
           window.menudata = window.menudata + msg.data;
         }
         break;
-      case 4:
+      case 4: //receiving matrix info
+      //state machine implementation
         if(msg.data == "$ENDMATRIXUPDATE")
         {
           console.debug("ended receiving matrix info");
@@ -180,10 +193,11 @@ try{
         }
         break;
     }
+    //log the message
     console.log('Received: ' + msg.data);
-    //window.startDot();
   }
 
+  //when the sockets closes display red banner to the user
   socket.onclose = function(){
     console.log('Socket Status: '+socket.readyState+' (Closed)');
     setTimeout(function(){
@@ -191,32 +205,37 @@ try{
     }, 2000);
   }
 
-} catch(exception){
-  console.log('Error'+exception);
+  } catch(exception){
+    console.log('Error'+exception);
+  }
+
+  //parse a received dotfile package as specified in the protocl
+  window.ParsePacket = function ParsePacket()
+  {
+    var info = JSON.parse(window.dotdata);
+    $("#info").text(info[0]);
+    window.dotdata = info[1];
+    window.startDot();
+  }
+  window.socket = socket;
 }
 
-window.ParsePacket = function ParsePacket()
-{
-  var info = JSON.parse(window.dotdata);
-  $("#info").text(info[0]);
-  window.dotdata = info[1];
-  window.startDot();
-}
-window.socket = socket;
-}
-
+//request an update of the menu information from the server
 window.RequestUpdateMenu = function RequestUpdateMenu()
 {
 window.state = 2;
+//package info according to protocol
 window.socket.send(JSON.stringify(["$REQUESTHISTORY", window.schedulers]));
 }
 
+//parse package with menu information
 window.ParseMenu = function ParseMenu()
 {
 window.state = 0;
 window.menu = JSON.parse(window.menudata);
 var html = "<div class=\"accordion\" data-role=\"accordion\" data-close-any=\"true\">\n";
 
+//build the html for the menu in the sidebar
 for(var i = 0; i < window.schedulers.length; i++)
 {
   if (window.schedulers[i] in window.menu)
@@ -242,17 +261,22 @@ for(var i = 0; i < window.schedulers.length; i++)
 
 html += "</div>\n";
 console.log(html);
+//render the html in the browser
 $("#controls").html(html);
+//notify user with banner
 setTimeout(function(){
     $.Notify({type: 'info', caption: 'Info', content: "Menu updated"});
 }, 2000);
 }
 
+//update the scheduling matrix
 window.UpdateMatrix = function UpdateMatrix()
 {
+  //parse the package according to the protocol
 var infopackage = JSON.parse(window.matrixdata);
 if(infopackage[3] == 2)
 {
+  //do blacklisting propagation through the matrix
   var cchannel = infopackage[0][0];
   var cslot = infopackage[0][1];
   while(1)
@@ -280,11 +304,14 @@ if(infopackage[3] == 2)
 }
 else
 {
+  //using or deusing a cell, update that cell in the matrix object
   window.matrix[infopackage[1]][infopackage[0][0]][infopackage[0][1]] = [infopackage[3], infopackage[2]];
 }
+//rerender the matrix itself to the screen
 window.RenderMatrix(infopackage[1]);
 }
 
+//renders the scheduling matrix to the screen. takes the frame to be rendered as inputargument
 window.RenderMatrix = function RenderMatrix(frame)
 {
 //settings for this function
@@ -302,6 +329,7 @@ var widthcell = Math.round((widthmatrix - 2 * numx) / numx);
 
 var html = "<div class=\"tile-container bg-darkCobalt\" style=\"width:" + widthmatrix + "px;\">";
 
+//iterate through the matrix and build the html
 for(var y = 0; y < numy; y++)
 {
   for(var x = 0; x < numx; x++)
@@ -309,6 +337,7 @@ for(var y = 0; y < numy; y++)
     var status = window.matrix[frame][y][x][0];
     var color = "bg-black";
 
+    //color depending on the status of the cell
     switch(status)
     {
       case 0://available
@@ -331,6 +360,7 @@ for(var y = 0; y < numy; y++)
 }
 
 html += "</div>";
+//do some css magic to create fancy fade effect
 $("#"+frame).removeClass("load");
 setTimeout(function() {
   $("#"+frame).html(html);
@@ -338,6 +368,7 @@ setTimeout(function() {
 }, 500);
 }
 
+//send a request for specific dotfile with given scheduler ip and filename (aka timestamp)
 window.RequestDotFile = function RequestDotFile(scheduler, dotname)
 {
 window.socket.send(JSON.stringify(["$REQUESTGRAPH", scheduler, dotname]));
