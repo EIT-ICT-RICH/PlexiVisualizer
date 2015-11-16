@@ -6,11 +6,25 @@ var state = 0; //-2: receiving boot info, -1: logging in 0: open for new graphs 
 var menudata = "";
 var matrixdata = "";
 var matrix = {};
-var schedulers  = ["aaaa::215:8d00:57:6466", "aaaa::215:8d00:57:1234"];
+var schedulers  = [];
 var menu = {
   "aaaa::215:8d00:57:6466" : [],
   "aaaa::215:8d00:57:1234" : []
 };
+var frames = {};
+
+window.selectedCell = null;
+function ClickCell(obj){
+  if(window.selectedCell != null)
+  {
+    window.selectedCell.style.border="";
+  }
+  obj.style.border="0.5px solid red";
+  window.selectedCell = obj;
+  console.log(obj.id);
+  var infos = obj.id.split('.');
+  $("#matrixinfo").html(window.matrix[infos[0]][infos[1]][infos[2]][1]);
+}
 
 //function that is called when the user clicks login
 window.bootup = function bootup()
@@ -57,45 +71,48 @@ try{
     switch(window.state)
     {
       case -2: //receiving boot info
-        frames = JSON.parse(msg.data);
+        window.frameinfo = JSON.parse(msg.data);
         //build html for tabcontrol for matrix
         var html = "<div class=\"tabcontrol2\" data-role=\"tabControl\"><ul class=\"tabs\">";
-        for(var i = 0; i < frames.length; i++)
+        // for(var i = 0; i < frames.length; i++)
+        for(frame in window.frameinfo)
         {
-          html += "<li><a href=\"#" + frames[i] + "\">" + frames[i] + "</a></li>";
+          html += "<li><a href=\"#" + frame + "\">" + frame + "</a></li>";
         }
         html += "</ul><div class=\"frames\">";
-        for(var i = 0; i < frames.length; i++)
+        // for(var i = 0; i < frames.length; i++)
+        for(frame in window.frameinfo)
         {
-          html += "<div class=\"frame matrix\" id=\"" + frames[i] + "\"></div>";
+          html += "<div class=\"frame matrix\" id=\"" + frame + "\"></div>";
         }
         html += "</div></div>";
         $("#schedulestuff").html(html);
         //init the matrices
-        for(var i = 0; i < frames.length; i++)
+        // for(var i = 0; i < frames.length; i++)
+        for(frame in window.frameinfo)
         {
-          window.matrix[frames[i]] = [];
+          window.matrix[frame] = [];
           //init the matrix
           for(var y = 0; y < 16; y++)
           {
-            window.matrix[frames[i]].push([]);
-            //HARDCODED 25 CELLS
-            for(var x = 0; x < 25; x++)
+            window.matrix[frame].push([]);
+            for(var x = 0; x < window.frameinfo[frame]; x++)
             {
-              window.matrix[frames[i]][y].push([0,"Not Used"]);
+              window.matrix[frame][y].push([0,"Not Used"]);
             }
           }
 
         }
+        console.log(window.matrix);
         window.state = 0;
         //unhide the div
         $("#app").removeClass("hidden");
         //and activate the graphviz javascript renderer
         w_launch();
         RequestUpdateMenu();
-        for(var i = 0; i < frames.length; i++)
+        for(frame in window.frameinfo)
         {
-          window.RenderMatrix(frames[i]);
+          window.RenderMatrix(frame);
         }
         break;
       case -1: //logging in
@@ -320,18 +337,19 @@ var w = window.innerWidth;
 var h = window.innerHeight;
 
 //actual function starts here
-var numx = 25;
+var numx = window.frameinfo[frame];
 var numy = 16;
 
 //calculated settings
 var widthmatrix = widthmatrixp * w;
 var widthcell = Math.round((widthmatrix - 2 * numx) / numx);
 
-var html = "<div class=\"tile-container bg-darkCobalt\" style=\"width:" + widthmatrix + "px;\">";
-
+// var html = "<div class=\"tile-container bg-darkCobalt\" style=\"width:" + widthmatrix + "px;\">";
+var html = "";
 //iterate through the matrix and build the html
 for(var y = 0; y < numy; y++)
 {
+  html += "<div class=\"row\" style=\"width:" + widthmatrix + "px;\">";
   for(var x = 0; x < numx; x++)
   {
     var status = window.matrix[frame][y][x][0];
@@ -341,22 +359,24 @@ for(var y = 0; y < numy; y++)
     switch(status)
     {
       case 0://available
-        color = "bg-grayLight";
+        color = "green";
         break;
       case 1://used
-        color = "bg-emerald";
+        color = "blue";
         break;
       case 2://blacklisted
-        color = "bg-darkRed";
+        color = "red";
         break;
     }
-    html += "<div class=\"tile-small " + color + "\" style=\"margin: 1px;width:" + widthcell + "px;height:" + widthcell + "px;\">"
-    html += "<div class=\"tile-content slide-down\">";
-    html += "<div class=\"slide\">";
-    html += "</div><div class=\"slide-over bg-darkBlue\" style=\"font-size: 10px;\">";
-    html += window.matrix[frame][y][x][1];
-    html += "</div></div></div>";
+    // html += "<div class=\"tile-small " + color + "\" style=\"margin: 1px;width:" + widthcell + "px;height:" + widthcell + "px;\">"
+    // html += "<div class=\"tile-content slide-down\">";
+    // html += "<div class=\"slide\">";
+    // html += "</div><div class=\"slide-over bg-darkBlue\" style=\"font-size: 10px;\">";
+    // html += window.matrix[frame][y][x][1];
+    // html += "</div></div></div>";
+    html += "<div id=\"" + frame + "." + y + "." + x + "\"  class=\"tilem " + color + "\" style=\"width:" + (widthcell - 2) + "px; height:" + (widthcell - 2) + "px;\" onclick=\"ClickCell(this)\"></div>";
   }
+  html += "</div>";
 }
 
 html += "</div>";

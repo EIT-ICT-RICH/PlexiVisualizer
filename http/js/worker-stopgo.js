@@ -66,17 +66,21 @@
 	StopGo.Controller.prototype = {
 		makeFlagBlobs: function() {
 			var builder1 = getBlobBuilder();
-			if (!builder1) {
-				return;
-			}
-			
-			builder1.append("RUN ");
+            var builder2 = getBlobBuilder();
 
-			var builder2 = getBlobBuilder();
-			builder2.append("STOP");
+            if(!builder1)
+            {
+                this.blobRUN = new Blob(['RUN '], {type: 'text/plain'});
+                this.blobSTOP = new Blob(['STOP'], {type: 'text/plain'});
+            }
+            else
+            {
+                builder1.append("RUN ");
+                builder2.append("STOP");
 
-			this.blobRUN  = builder1.getBlob('text/plain');
-			this.blobSTOP = builder2.getBlob('text/plain');
+                this.blobRUN  = builder1.getBlob('text/plain');
+                this.blobSTOP = builder2.getBlob('text/plain');
+            }
 		},
 
 		run: function() {
@@ -122,7 +126,7 @@
 						fileEntry.createWriter(function(fileWriter) {
 							_this.sharedFileWriter = fileWriter;
 							fileEntry.file(function(f){
-								var u = webkitURL || URL;
+								var u = URL;
 								_this.sharedFileURL = u.createObjectURL(f);
 								onComplete( _this.sharedFileURL );
 							});

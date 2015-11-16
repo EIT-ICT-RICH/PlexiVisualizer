@@ -29,3 +29,52 @@
   -o-transition: all 500ms ease;
   transition: all 500ms ease;
 }
+
+.row div{
+  float:left;
+  /*border: 1px solid black;*/
+  margin: 0.5px;
+}
+.tilem {
+  /*display: inline-block;
+  box-sizing: border-box;
+  background: #fff;*/
+  /*padding: 20px;*/
+  /*margin-bottom: 30px;*/
+}
+.tilem .title {
+  margin-top: 0px;
+}
+.tilem.purple, .tilem.blue, .tilem.red, .tilem.orange, .tilem.green {
+  color: #fff;
+}
+.tilem.purple {
+  background: #5133AB;
+}
+.tilem.purple:hover {
+  background: #3e2784;
+}
+.tilem.red {
+  background: #AC193D;
+}
+.tilem.red:hover {
+  background: #7f132d;
+}
+.tilem.green {
+  background: #00A600;
+}
+.tilem.green:hover {
+  background: #007300;
+}
+.tilem.blue {
+  background: #2672EC;
+}
+.tilem.blue:hover {
+  background: #125acd;
+}
+.tilem.orange {
+  background: #DC572E;
+}
+.tilem.orange:hover {
+  background: #b8431f;
+}

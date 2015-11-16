@@ -47,7 +47,7 @@ if (!window['JSViz']){window['JSViz']={};}
 		var s = this.element.style;
 		s.minHeight = "22px";
 		s.minWidth = "48px";
-		s.backgroundImage = "url('" +ErrorIndicator.SignalImage.url+ "')";
+		//s.backgroundImage = "url('" +ErrorIndicator.SignalImage.url+ "')";
 		s.backgroundRepeat = "no-repeat";
 		s.paddingLeft = "40px";
 		this.setSignal(0);
@@ -56,10 +56,10 @@ if (!window['JSViz']){window['JSViz']={};}
 		this.jLabel = $(label);
 	}
 
-	ErrorIndicator.SignalImage = {
+/* 	ErrorIndicator.SignalImage = {
 		url: "images/signals.png",
 		height: 22
-	};
+	}; */
 
 	ErrorIndicator.prototype = {
 		update: function() {
@@ -93,7 +93,7 @@ if (!window['JSViz']){window['JSViz']={};}
 	var DMY_IMG = "data:image/gif;base64,R0lGODlhCAACALMAAM7OMf"+
 	 "///////////////////////////////////////////////////////////yH5BAEAAAAALAAAAAAIAAIAQAQEEMgpIwA7";
 	var PLAYBUTTON_URL = "images/gobutton.png";
-	var MOREBUTTON_URL = "images/morebtn.gif";
+	//var MOREBUTTON_URL = "images/morebtn.gif";
 	function PlayButton(containerElement, menuElement) {
 		var img = $H('img');
 		img.src = DMY_IMG;
@@ -104,9 +104,9 @@ if (!window['JSViz']){window['JSViz']={};}
 		this.containerElement = containerElement;
 		this.enabled = true;
 
-		var more_img = $H('img');
-		more_img.src = MOREBUTTON_URL;
-		more_img.setAttribute('class', 'jsv-more-button');
+		//var more_img = $H('img');
+		//more_img.src = MOREBUTTON_URL;
+		//more_img.setAttribute('class', 'jsv-more-button');
 
 		// menu triggers
 		var _this = this;
