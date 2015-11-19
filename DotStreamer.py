@@ -15,8 +15,11 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from os.path import splitext, basename
 import mimetypes
 import sys
+import logger
+import logging
 
-#TODO: replace all print statements with proper logging
+logg = logging.getLogger('FrankFancyStreamer')
+logg.setLevel(logging.DEBUG)
 
 """
 global settings and database of connected clients and schedulers
@@ -26,12 +29,11 @@ connectedSchedulers = {}
 client_schedulers = {}#key: client identity, value: list of requested schedulers
 scheduler_clients = {}#key: scheduler identity, value: list of sockets that listen to this scheduler
 scheduler_frames = {
-	"aaaa::215:8d00:57:6466" : {
-		"frames"	: ["Broadcast-Frame", "Unicast-Frame"],
-		"cells"		: 25
-	},
 	"n1"	: {
 		"broadcast"	: 11
+	},
+	"aaaa::215:8d00:57:64be"	: {
+		"broadcast"	: 25
 	}
 }#key: scheduler identity, value: list of framenames
 users = {}#key: username, value: dict: password: password of user, schedulers: list of allowed schedulers
@@ -121,17 +123,18 @@ class ThreadedServerHandler(socketserver.BaseRequestHandler):
 			try:
 				userdata = json.loads(str(data, "utf-8"))
 			except:
-				print("problem with login package from " + str(addr))
+				logg.debug("problem with login package from " + str(addr))
+				return
 
 			self.identity = userdata["name"]
 			#check the login and report its status to the client
 			if self.identity not in users:
-				print("Wrong login for user " + self.identity + " from " + str(addr))
+				logg.debug("Wrong login for user " + self.identity + " from " + str(addr))
 				self.send(self.request, "WRONG")
 				return
 
 			if users[self.identity]["password"] != userdata["password"]:
-				print("Wrong login for user " + self.identity + " from " + str(addr))
+				logg.debug("Wrong login for user " + self.identity + " from " + str(addr))
 				self.send(self.request, "WRONG")
 				return
 
@@ -147,13 +150,11 @@ class ThreadedServerHandler(socketserver.BaseRequestHandler):
 					scheduler_clients[shd] = []
 					scheduler_clients[shd].append(self)
 			self.send(self.request,"OK")
-			#TODO: multiple schedulers support for the frame streaming
 			#send the frames for the scheduler (only the first one is supported atm
 			frames = scheduler_frames[schedulers[0]]
-			print(frames)
 			self.send(self.request,json.dumps(frames))
 			#wait for requests of info from the user gui
-			print("New connection(webclient): " + self.identity)
+			logg.info("New connection(webclient): " + self.identity)
 			while True:
 				try:
 					#parse incomming data
@@ -165,8 +166,8 @@ class ThreadedServerHandler(socketserver.BaseRequestHandler):
 					try:
 						commands = json.loads(data)
 					except:
-						print("Client from "  + self.identity + " sended invalid json: \n" + data)
-					#TODO: check if the requested data is allowed (scheduler names)
+						logg.debug("Client from "  + self.identity + " sended invalid json: \n" + data)
+						continue
 					#check which request is done
 					#see technical details document for exact syntax of packages
 					if commands[0] == "$REQUESTHISTORY":
@@ -174,7 +175,7 @@ class ThreadedServerHandler(socketserver.BaseRequestHandler):
 						packet = {}
 						for scheduler in commands[1]:
 							if not os.path.exists("snapshots/" + scheduler.split(":")[-1]):
-								print("Client from " + self.identity + " requested history of unkown scheduler: " + scheduler)
+								logg.debug("Client from " + self.identity + " requested history of unkown scheduler: " + scheduler)
 								continue
 							path = "snapshots/" + scheduler.split(":")[-1]
 							files = [ f for f in listdir(path) if isfile(join(path,f)) ]
@@ -188,16 +189,16 @@ class ThreadedServerHandler(socketserver.BaseRequestHandler):
 						#send a specific graph in .dot format read from disk
 						file = "snapshots/" + commands[1].split(":")[-1] + "/" + str(commands[2]) + ".dot"
 						if not os.path.exists(file) or not os.path.isfile(file):
-							print("Client from " + self.identity + " requested non existing graph: " + file)
+							logg.debug("Client from " + self.identity + " requested non existing graph: " + file)
 							continue
 						with open(file, "r") as stream:
 							dotfile = stream.read()
 						self.send(self.request, json.dumps([commands[1] + "at: " + datetime.datetime.fromtimestamp(int(commands[2])).strftime('%Y-%m-%d %H:%M:%S'),dotfile]))
 					else:
-						print("Client from " + self.identity + " issued unkown command: " + commands[0])
+						logg.debug("Client from " + self.identity + " issued unkown command: " + commands[0])
 				except:
 					#when an error has occured the client is either disconnected or it will be disconnected here
-					print("\nClient from " + self.identity + " disconnected")
+					logg.info("\nClient from " + self.identity + " disconnected")
 					#TODO: remove client from all data items to prevent trying to send to closed socket
 					return
 		else:
@@ -209,21 +210,20 @@ class ThreadedServerHandler(socketserver.BaseRequestHandler):
 			if self.identity not in scheduler_clients:
 				scheduler_clients[self.identity] = []
 			self.identity = request
-			print("New connection(scheduler): " + self.identity)
+			logg.info("New connection(scheduler): " + self.identity)
 			#check if a folder for this scheduler already exists on disk. if not than create one
 			self.folder = "snapshots/" + self.identity.split(":")[-1]
 			if not os.path.exists(self.folder):
 				os.makedirs(self.folder)
 			data = str(self.request.recv(1024), "utf-8")
 			jsondata = json.loads(data)
-			print(jsondata)
+			logg.debug(jsondata)
 			scheduler_frames[self.identity] = {}
 			#create matrix with empty cells in the internal database
 			for framedata in jsondata:
 				self.frames[framedata["id"]] = []
 				scheduler_frames[self.identity][framedata["id"]] = framedata["cells"]
 				#TODO: send update of these frames to clients
-				#TODO: dynamic sending off ammount of cells to the client (currently hardcoded to 25 within the user gui)
 				for y in range(0, 16):
 					self.frames[framedata["id"]].append([])
 					for x in range(0, framedata["cells"]):
@@ -233,8 +233,7 @@ class ThreadedServerHandler(socketserver.BaseRequestHandler):
 				data = str(self.request.recv(1024), "utf-8")
 				if data == "":
 					continue
-				print("data received:")
-				print(data)
+				logg.debug("data received:{}".format(data))
 				#check if data is dotfile or other data
 				jsondata = json.loads(data)
 				#check if and what kind of data is incomming
@@ -251,7 +250,6 @@ class ThreadedServerHandler(socketserver.BaseRequestHandler):
 					for client in scheduler_clients[self.identity]:
 						self.send(client.request, package, t=1)
 				else:#no command recognised so its a dotfile
-					print("dotfile received")
 					#save it to disk
 					with open(self.folder + "/" + str(int(time.time())) + ".dot", "w") as stream:
 						stream.writelines(jsondata[1])
@@ -277,15 +275,12 @@ class ThreadedServerHandler(socketserver.BaseRequestHandler):
 			elif "Origin" in line:
 				self.origin = line.split(":")[0]
 
-		# print("websocketkey: " + websocketkey + "\n")
 		fullKey = hashlib.sha1(websocketkey.encode("utf-8") + specificationGUID.encode("utf-8")).digest()
 		acceptKey = base64.b64encode(fullKey)
-		# print("acceptKey: " + str(acceptKey, "utf-8") + "\n")
 		if protocol != "":
 			handshake = "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Protocol: " + protocol + "\r\nSec-WebSocket-Accept: " + str(acceptKey, "utf-8") + "\r\n\r\n"
 		else:
 			handshake = "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: " + str(acceptKey, "utf-8") + "\r\n\r\n"
-		# print(handshake.strip("\n"))
 		self.request.send(bytes(handshake, "utf-8"))
 
 	def send(self, socket, data, t=0):
@@ -303,7 +298,7 @@ class ThreadedServerHandler(socketserver.BaseRequestHandler):
 		:return:
 		"""
 		if t == 0:
-			print("sending data: " + data)
+			logg.debug("sending data: " + data)
 			if len(data) < 126:
 				socket.sendall(self.create_frame(data))
 				return
@@ -313,7 +308,7 @@ class ThreadedServerHandler(socketserver.BaseRequestHandler):
 				socket.sendall(self.create_frame(co))
 			socket.sendall(self.create_frame("$ENDGRAPH"))
 		elif t == 1:
-			print("sending data: " + data)
+			logg.debug("sending data: " + data)
 			if len(data) < 126:
 				socket.sendall(self.create_frame("$STARTMATRIXUPDATE"))
 				socket.sendall(self.create_frame(data))
@@ -348,8 +343,6 @@ class ThreadedServerHandler(socketserver.BaseRequestHandler):
 
 		# add data
 		frame = frame_head + data.encode('utf-8')
-		# print("frame crafted for message " + data + ":")
-		# print(list(hex(b) for b in frame))
 		return frame
 
 	def is_bit_set(self, int_type, offset):
@@ -390,12 +383,6 @@ class ThreadedServerHandler(socketserver.BaseRequestHandler):
 		# read the first two bytes
 		frame_head = s.recv(2)
 
-		# very first bit indicates if this is the final fragment
-		# print("final fragment: ", self.is_bit_set(frame_head[0], 7))
-
-		# bits 4-7 are the opcode (0x01 -> text)
-		# print("opcode: ", frame_head[0] & 0x0f)
-
 		# mask bit, from client will ALWAYS be 1
 		assert self.is_bit_set(frame_head[1], 7)
 
@@ -408,14 +395,12 @@ class ThreadedServerHandler(socketserver.BaseRequestHandler):
 		elif payload_length == 127:
 			raw = s.recv(8)
 			payload_length = self.bytes_to_int(raw)
-		# print('Payload is {} bytes'.format(payload_length))
 
 		#masking key
 		#All frames sent from the client to the server are masked by a
 		#32-bit nounce value that is contained within the frame
 
 		masking_key = s.recv(4)
-		# print("mask: ", masking_key, self.bytes_to_int(masking_key))
 
 		# finally get the payload data:
 		masked_data_in = s.recv(payload_length)
@@ -522,10 +507,10 @@ def ReadDatabase():
 			}
 			# users.append([line.split(" ")[0].strip("\n"), line.split(" ")[1], int(line.split(" ")[2]), int(line.split(" ")[3].strip("\n"))])
 		database.close()
-		print("read "+str(count)+" users from file to database")
+		logg.info("read "+str(count)+" users from file to database")
 
 	except:
-		print("ERROR: failed reading database, server will now exit")
+		logg.critical("ERROR: failed reading database, server will now exit")
 		time.sleep(1)
 		database.close()
 		sys.exit()
@@ -536,7 +521,7 @@ if __name__ == "__main__":
 	parser.add_argument('--ip', nargs='?', const=1, type=str, default="localhost", help="ip which the server will bind to")
 	#parse user info
 	ReadDatabase()
-	print("booting StreamServer and http server")
+	logg.info("booting StreamServer and http server")
 	HOST = parser.parse_args().ip
 	PORT = 600
 	#check if snapshots folder exists. if not create it.
@@ -547,9 +532,9 @@ if __name__ == "__main__":
 	server_thread = threading.Thread(target=server.serve_forever)
 	server_thread.daemon = True
 	server_thread.start()
-	print("StreamServer running at " + str(PORT) + ", waiting for connections...")
+	logg.info("StreamServer running at " + str(PORT) + ", waiting for connections...")
 	mimetypes.init()
 	server_address = (HOST, 80)
 	server = HTTPServer(server_address, httpRequestHandler)
-	print("http server is running at " + server_address[0] + ":" + str(server_address[1]))
+	logg.info("http server is running at " + server_address[0] + ":" + str(server_address[1]))
 	server.serve_forever()
