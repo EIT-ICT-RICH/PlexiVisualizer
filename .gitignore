@@ -1,4 +1,5 @@
 .idea/*
+logs/
 *.pyc
 *.png
 *.dot

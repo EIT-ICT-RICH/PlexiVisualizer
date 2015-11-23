@@ -34,6 +34,9 @@ scheduler_frames = {
 	},
 	"aaaa::215:8d00:57:64be"	: {
 		"broadcast"	: 25
+	},
+	"bbbb::215:8d00:52:699a"	: {
+		"broadcast"	: 25
 	}
 }#key: scheduler identity, value: list of framenames
 users = {}#key: username, value: dict: password: password of user, schedulers: list of allowed schedulers
@@ -174,13 +177,13 @@ class ThreadedServerHandler(socketserver.BaseRequestHandler):
 						#send a list of all available snapshots on disk of the network topology
 						packet = {}
 						for scheduler in commands[1]:
-							if not os.path.exists("snapshots/" + scheduler.split(":")[-1]):
-								logg.debug("Client from " + self.identity + " requested history of unkown scheduler: " + scheduler)
-								continue
-							path = "snapshots/" + scheduler.split(":")[-1]
-							files = [ f for f in listdir(path) if isfile(join(path,f)) ]
-							files = [int(i.strip(".dot")) for i in files]
-							packet[scheduler] = files
+							# if not os.path.exists("snapshots/" + scheduler.split(":")[-1]):
+							# 	logg.debug("Client from " + self.identity + " requested history of unkown scheduler: " + scheduler)
+							# 	continue
+							# path = "snapshots/" + scheduler.split(":")[-1]
+							# files = [ f for f in listdir(path) if isfile(join(path,f)) ]
+							# files = [int(i.strip(".dot")) for i in files]
+							packet[scheduler] = []
 						#because the json parser in javascript is fucking retarded we add a placeholder item to the dictionary
 						#it crashes when there is less than one item
 						packet["foo"] = []
