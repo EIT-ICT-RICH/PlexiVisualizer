@@ -289,6 +289,7 @@ setTimeout(function(){
 //update the scheduling matrix
 window.UpdateMatrix = function UpdateMatrix()
 {
+return;
   //parse the package according to the protocol
 var infopackage = JSON.parse(window.matrixdata);
 if(infopackage[3] == 2)

@@ -215,9 +215,9 @@ class ThreadedServerHandler(socketserver.BaseRequestHandler):
 			self.identity = request
 			logg.info("New connection(scheduler): " + self.identity)
 			#check if a folder for this scheduler already exists on disk. if not than create one
-			self.folder = "snapshots/" + self.identity.split(":")[-1]
-			if not os.path.exists(self.folder):
-				os.makedirs(self.folder)
+			# self.folder = "snapshots/" + self.identity.split(":")[-1]
+			# if not os.path.exists(self.folder):
+			# 	os.makedirs(self.folder)
 			data = str(self.request.recv(1024), "utf-8")
 			jsondata = json.loads(data)
 			logg.debug(jsondata)
@@ -258,8 +258,8 @@ class ThreadedServerHandler(socketserver.BaseRequestHandler):
 						self.send(client.request, package, t=1)
 				else:#no command recognised so its a dotfile
 					#save it to disk
-					with open(self.folder + "/" + str(int(time.time())) + ".dot", "w") as stream:
-						stream.writelines(jsondata[1])
+					# with open(self.folder + "/" + str(int(time.time())) + ".dot", "w") as stream:
+					# 	stream.writelines(jsondata[1])
 					#for each listener, send the dot file
 					for client in scheduler_clients[self.identity]:
 						self.send(client.request, data)
