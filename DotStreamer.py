@@ -233,7 +233,11 @@ class ThreadedServerHandler(socketserver.BaseRequestHandler):
 						self.frames[framedata["id"]][y].append(Cell("","","", 0,empty=True))
 			#wait for incomming data
 			while True:
-				data = str(self.request.recv(1024), "utf-8")
+				try:
+					data = str(self.request.recv(1024), "utf-8")
+				except:
+					logg.debug("Scheduler {} disconnected".format(self.identity))
+					return
 				if data == "":
 					continue
 				logg.debug("data received:{}".format(data))
